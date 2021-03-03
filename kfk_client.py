@@ -4,9 +4,10 @@ from kafka.errors import KafkaError
 import json
 from configs import get_cfg, get_logger
 import numpy as np
-import os
+import os, sys
 import uuid
 from datetime import date
+import random
 
 logger = get_logger()
 
@@ -17,8 +18,9 @@ logger = get_logger()
 
 # 成功回调
 def on_send_success(record_metadata):
-    logger.debug(
-        f"succeed send to topic :{record_metadata.topic}, partation: {record_metadata.partition}, and offset: {record_metadata.offset}")
+    # logger.debug(
+    #     f"succeed send to topic :{record_metadata.topic}, partation: {record_metadata.partition}, and offset: {record_metadata.offset}")
+    pass
 
 
 # 错误回调
@@ -48,6 +50,11 @@ def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
     moutpoint = cfg.PICTURE_MOUNT_POINT  # "/dev/shm/PICTURE_MOUNT_POINT"
     localhostip = cfg.LOCAL_HOST_IP  # 10.10.117.131
     today = date.today().strftime('%Y%m%d')  # "20210303"
+    try:
+        busitype = args['busitype']
+    except:
+        busitype = random.choice(
+            ["dustbin", "car", "bus", "track", "bicycle", "motocycle", "tricycle", "person", "face"])
     nj = NvJpeg()
     producer = KafkaProducer(bootstrap_servers=server, security_protocol="SASL_PLAINTEXT", sasl_mechanism='PLAIN',
                              sasl_plain_username=username, sasl_plain_password=password)
@@ -64,18 +71,19 @@ def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
             pass
 
     # merge
-    os.makedirs(os.path.join(moutpoint, today), exist_ok=True)
+    os.makedirs(os.path.join(moutpoint, busitype, today), exist_ok=True)
     for frame in imgs:
         assert frame.ndim == 3
         uudi_tmp = uuid.uuid4().hex
-        with open(os.path.join(moutpoint, today, f"{uudi_tmp}.jpg"), "wb") as fid:
+        with open(os.path.join(moutpoint, busitype, today, f"{uudi_tmp}.jpg"), "wb") as fid:
             frame_jpg = nj.encode(frame)
             fid.write(frame_jpg)
-        djson['image_url'] = os.path.join("/", localhostip, today, f"{uudi_tmp}.jpg")
+        djson['image_url'] = os.path.join(localhostip, busitype, today, f"{uudi_tmp}.jpg")
         dd = json.dumps(djson).encode('utf-8')
         producer.send(topic, value=dd).add_callback(on_send_success).add_errback(on_send_error)
-        # print('.',end='')
-        logger.debug(dd)
+        print('.', end='')
+    sys.stdout.flush()
+    # logger.debug(dd)
     producer.close()
     # producer = KafkaProducer(value_serializer=lambda m: json.dumps(args).encode('ascii'))
     # producer.send('json-topic', {'key': 'value'})
@@ -98,4 +106,4 @@ if __name__ == '__main__':
             continue
         persis_image_sendkafka(img, args)
 
-    # docker run -it --rm -d -p 8080:80 --name web -v /dev/shm/PICTURE_MOUNT_POINT:/usr/share/nginx/html:Z nginx
+    # docker run -it --rm -d -p 80:80 --name web -v /dev/shm/PICTURE_MOUNT_POINT:/usr/share/nginx/html:Z nginx
