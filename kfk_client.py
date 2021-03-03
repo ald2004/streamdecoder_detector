@@ -15,18 +15,44 @@ logger = get_logger()
 # init default config and merge from base.yaml
 # default values configs/__init__.py
 
+class Singleton(type):
+    _instances = {}
 
-# 成功回调
-def on_send_success(record_metadata):
-    # logger.debug(
-    #     f"succeed send to topic :{record_metadata.topic}, partation: {record_metadata.partition}, and offset: {record_metadata.offset}")
-    pass
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        else:
+            # because I wanted to initialise my class
+            cls._instances[cls].__init__(*args, **kwargs)
+        return cls._instances[cls]
 
 
-# 错误回调
-def on_send_error(excp):
-    logger.debug(f"faild send : {excp}")
-    # logger.debug('I am an errback', exc_info=excp)
+class ProducerWarp(metaclass=Singleton):
+    __connection = None
+
+    def __init__(self, server, username, password):
+        self.__connection = KafkaProducer(bootstrap_servers=server, security_protocol="SASL_PLAINTEXT",
+                                          sasl_mechanism='PLAIN',
+                                          sasl_plain_username=username, sasl_plain_password=password)
+
+    # 成功回调
+    @staticmethod
+    def on_send_success(record_metadata):
+        # logger.debug(
+        #     f"succeed send to topic :{record_metadata.topic}, partation: {record_metadata.partition}, and offset: {record_metadata.offset}")
+        pass
+
+    # 错误回调
+    @staticmethod
+    def on_send_error(excp):
+        logger.debug(f"faild send : {excp}")
+        # logger.debug('I am an errback', exc_info=excp)
+
+    def produce_business(self, data, topic):
+        self.__connection.send(topic, value=data).add_callback(self.on_send_success).add_errback(self.on_send_error)
+
+    def close(self):
+        self.__connection.close(timeout=1)
 
 
 def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
@@ -56,8 +82,9 @@ def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
         busitype = random.choice(
             ["dustbin", "car", "bus", "track", "bicycle", "motocycle", "tricycle", "person", "face"])
     nj = NvJpeg()
-    producer = KafkaProducer(bootstrap_servers=server, security_protocol="SASL_PLAINTEXT", sasl_mechanism='PLAIN',
-                             sasl_plain_username=username, sasl_plain_password=password)
+    # producer = KafkaProducer(bootstrap_servers=server, security_protocol="SASL_PLAINTEXT", sasl_mechanism='PLAIN',
+    #                          sasl_plain_username=username, sasl_plain_password=password)
+    producer = ProducerWarp(server, username, password)
     data = None
     with open('test.json', "rb") as f:
         data = f.read()
@@ -80,13 +107,12 @@ def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
             fid.write(frame_jpg)
         djson['image_url'] = os.path.join(localhostip, busitype, today, f"{uudi_tmp}.jpg")
         dd = json.dumps(djson).encode('utf-8')
-        producer.send(topic, value=dd).add_callback(on_send_success).add_errback(on_send_error)
+        # producer.send(topic, value=dd).add_callback(on_send_success).add_errback(on_send_error)
+        producer.produce_business(dd, topic)
         print('.', end='')
     sys.stdout.flush()
     # logger.debug(dd)
-    producer.close()
-    # producer = KafkaProducer(value_serializer=lambda m: json.dumps(args).encode('ascii'))
-    # producer.send('json-topic', {'key': 'value'})
+    # producer.close()
 
 
 if __name__ == '__main__':
@@ -99,7 +125,7 @@ if __name__ == '__main__':
 
     cap = cv2.VideoCapture("/dev/shm/output.avi")
     args = {}
-    for i in range(99):
+    for i in range(10):
         f, img = cap.read()
         # img = cv2.imread('test.jpg')
         if not f:
