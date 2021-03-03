@@ -49,7 +49,7 @@ class ProducerWarp(metaclass=Singleton):
         # logger.debug('I am an errback', exc_info=excp)
 
     def produce_business(self, data, topic):
-        self.__connection.send(topic, value=data).add_callback(self.on_send_success).add_errback(self.on_send_error)
+        self.__connection.send(topic, value=data).add_callback(ProducerWarp.on_send_success).add_errback(ProducerWarp.on_send_error)
 
     def close(self):
         self.__connection.close(timeout=1)
