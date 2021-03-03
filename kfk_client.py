@@ -9,9 +9,10 @@ import uuid
 from datetime import date
 
 logger = get_logger()
+
+
 # init default config and merge from base.yaml
 # default values configs/__init__.py
-
 
 
 # 成功回调
@@ -45,6 +46,7 @@ def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
     password = cfg.KFK_CONSUMER_PWD
     topic = cfg.KFK_TOPIC_CUSTOMERFLOW
     moutpoint = cfg.PICTURE_MOUNT_POINT  # "/dev/shm/PICTURE_MOUNT_POINT"
+    localhostip = cfg.LOCAL_HOST_IP  # 10.10.117.131
     today = date.today().strftime('%Y%m%d')  # "20210303"
     nj = NvJpeg()
     producer = KafkaProducer(bootstrap_servers=server, security_protocol="SASL_PLAINTEXT", sasl_mechanism='PLAIN',
@@ -69,7 +71,7 @@ def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
         with open(os.path.join(moutpoint, today, f"{uudi_tmp}.jpg"), "wb") as fid:
             frame_jpg = nj.encode(frame)
             fid.write(frame_jpg)
-        djson['image_url'] = os.path.join("/", today, f"{uudi_tmp}.jpg")
+        djson['image_url'] = os.path.join("/", localhostip, today, f"{uudi_tmp}.jpg")
         dd = json.dumps(djson).encode('utf-8')
         producer.send(topic, value=dd).add_callback(on_send_success).add_errback(on_send_error)
         # print('.',end='')
