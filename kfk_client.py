@@ -49,7 +49,8 @@ class ProducerWarp(metaclass=Singleton):
         # logger.debug('I am an errback', exc_info=excp)
 
     def produce_business(self, data, topic):
-        self.__connection.send(topic, value=data).add_callback(ProducerWarp.on_send_success).add_errback(ProducerWarp.on_send_error)
+        self.__connection.send(topic, value=data).add_callback(ProducerWarp.on_send_success).add_errback(
+            ProducerWarp.on_send_error)
 
     def close(self):
         self.__connection.close(timeout=1)
@@ -78,9 +79,11 @@ def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
     today = date.today().strftime('%Y%m%d')  # "20210303"
     try:
         busitype = args['busitype']
+        urlkeylist = args['imgurl_key_list']
     except:
         busitype = random.choice(
-            ["dustbin", "car", "bus", "track", "bicycle", "motocycle", "tricycle", "person", "face"])
+            ["dustbin", "car", "bus", "track", "bicycle", "motocycle", "tricycle", "person", "face", "alien"])
+        urlkeylist = ['img_url' for _ in range(len(imgs))]
     nj = NvJpeg()
     # producer = KafkaProducer(bootstrap_servers=server, security_protocol="SASL_PLAINTEXT", sasl_mechanism='PLAIN',
     #                          sasl_plain_username=username, sasl_plain_password=password)
@@ -99,13 +102,15 @@ def persis_image_sendkafka(img: np.ndarray, args: dict, cfg=None):
 
     # merge
     os.makedirs(os.path.join(moutpoint, busitype, today), exist_ok=True)
-    for frame in imgs:
+    for iiii, frame in enumerate(imgs):
         assert frame.ndim == 3
         uudi_tmp = uuid.uuid4().hex
         with open(os.path.join(moutpoint, busitype, today, f"{uudi_tmp}.jpg"), "wb") as fid:
             frame_jpg = nj.encode(frame)
             fid.write(frame_jpg)
-        djson['image_url'] = os.path.join(localhostip, busitype, today, f"{uudi_tmp}.jpg")
+        # djson['image_url'] = os.path.join(localhostip, busitype, today, f"{uudi_tmp}.jpg")
+        djson[urlkeylist[iiii]] = os.path.join(localhostip, busitype, today, f"{uudi_tmp}.jpg")
+
         dd = json.dumps(djson).encode('utf-8')
         # producer.send(topic, value=dd).add_callback(on_send_success).add_errback(on_send_error)
         producer.produce_business(dd, topic)
